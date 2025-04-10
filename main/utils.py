@@ -1,4 +1,6 @@
+import hashlib
 import importlib
+import pickle
 from typing import Any, Callable
 import importlib.util
 import sys
@@ -86,6 +88,18 @@ def load_module(module_path: str) -> types.ModuleType:
         raise e
 
 
+def hash_object(obj: Any) -> str:
+    """
+    Returns an MD5 hash of a pickled Python object.
+
+    Args:
+        obj: The object to hash.
+
+    Returns:
+        A string representing the MD5 hash.
+    """
+    return hashlib.md5(pickle.dumps(obj)).hexdigest()
+
 def make_test_func(
     func_name: str,
     cases: List[Tuple],
@@ -112,9 +126,14 @@ def make_test_func(
             with self.subTest(func=func_name, args=args):
                 actual = getattr(module, func_name)(*args)
                 expected = stored_results[func_name][args]
-                self.assertEqual(
-                    actual, expected,
-                    msg=f"\nFunction: {func_name}\nArgs: {args}\nExpected: {expected}\nGot: {actual}"
-                )
+
+                try:
+                    # Attempt to directly compare the actual and expected values
+                    self.assertEqual(actual, expected,
+                        msg=f"\nFunction: {func_name}\nArgs: {args}\nExpected: {expected}\nGot: {actual}")
+                except NotImplementedError:
+                    # If equality comparison is not implemented (e.g., for AnnData), compare hashes instead
+                    self.assertEqual(hash_object(actual), hash_object(expected),
+                        msg=f"\nFunction: {func_name}\nArgs: {args}\nExpected hash: {hash_object(expected)}\nGot hash: {hash_object(actual)}")
 
     return test
