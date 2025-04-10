@@ -26,7 +26,7 @@ Framework for unittesting Python modules to detect unintended changes between ve
     def add(x, y):
         return operator.add(x, y)
 
-    def add_1(x, y):
+    def add_1(x):
         return operator.add(x, 1)
     ```
 
