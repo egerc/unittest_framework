@@ -104,7 +104,8 @@ def make_test_func(
     func_name: str,
     cases: List[Tuple],
     module: object,
-    stored_results: Dict[str, Dict[Tuple, Any]]
+    stored_results: Dict[str, Dict[Tuple, Any]],
+    fail_fast: bool
 ) -> Callable[[unittest.TestCase], None]:
     """
     Creates a test function for a specific function in the module that compares its output
@@ -116,12 +117,16 @@ def make_test_func(
         module (object): The module that contains the function to test.
         stored_results (Dict[str, Dict[Tuple, Any]]): A dictionary containing expected outputs
                                                       for each function and argument tuple.
+        fail_fast (bool): If True, stop running tests after the first failure.
 
     Returns:
         Callable[[unittest.TestCase], None]: A test function that compares the actual output of the function
                                              with the expected output for each argument tuple.
     """
     def test(self: unittest.TestCase) -> None:
+        # Track if there were any assertion failures
+        failures = []
+
         for args in cases:
             with self.subTest(func=func_name, args=args):
                 actual = getattr(module, func_name)(*args)
@@ -131,9 +136,26 @@ def make_test_func(
                     # Attempt to directly compare the actual and expected values
                     self.assertEqual(actual, expected,
                         msg=f"\nFunction: {func_name}\nArgs: {args}\nExpected: {expected}\nGot: {actual}")
+                except AssertionError as e:
+                    # If there's a failure, record it
+                    failures.append(f"\nAssertion failed for {func_name} with args {args}: {e}")
                 except NotImplementedError:
                     # If equality comparison is not implemented (e.g., for AnnData), compare hashes instead
-                    self.assertEqual(hash_object(actual), hash_object(expected),
-                        msg=f"\nFunction: {func_name}\nArgs: {args}\nExpected hash: {hash_object(expected)}\nGot hash: {hash_object(actual)}")
+                    try:
+                        self.assertEqual(hash_object(actual), hash_object(expected),
+                            msg=f"\nFunction: {func_name}\nArgs: {args}\nExpected hash: {hash_object(expected)}\nGot hash: {hash_object(actual)}")
+                    except AssertionError as e:
+                        # If hash comparison fails, record it
+                        failures.append(f"Hash comparison failed for {func_name} with args {args}: {e}")
+
+            if fail_fast and failures:
+                # If we're failing fast, stop after the first failure
+                break
+
+        # If there were any failures, output them after all tests have run
+        if failures:
+            for failure in failures:
+                print(failure)
+            self.fail("One or more tests failed.")
 
     return test
