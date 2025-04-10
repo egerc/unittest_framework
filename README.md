@@ -82,14 +82,15 @@ Framework for unittesting Python modules to detect unintended changes between ve
     **`testmap.py` Usage:**
 
     ```
-    usage: testmap.py [-h] --module MODULE --input INPUT
+    usage: testmap.py [-h] --module MODULE --input INPUT [--fail-fast]
 
     Unit test loaded func results
 
     options:
-      -h, --help      show this help message and exit
-      --module MODULE Path to the Python file (e.g., /path/to/my_module.py)
-      --input INPUT   Input pickle file path
+      -h, --help       show this help message and exit
+      --module MODULE  Path to the Python file (e.g., /path/to/my_module.py)
+      --input INPUT    Input pickle file path
+      --fail-fast      Stop testing after the first failure
     ```
 
 **Explanation:**
