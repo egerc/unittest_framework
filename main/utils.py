@@ -1,7 +1,7 @@
 import hashlib
 import importlib
 import pickle
-from typing import Any, Callable
+from typing import Any, Callable, TypeVar
 import importlib.util
 import sys
 import types
@@ -10,49 +10,67 @@ from typing import Any, Mapping, Tuple, List, Dict
 import unittest
 
 
-def map_args_to_function_outputs(
-    module: types.ModuleType,
-    function_args: Mapping[str, List[Tuple[Any, ...]]]
-) -> Dict[str, Dict[Tuple[Any, ...], Any]]:
+T = TypeVar("T")
+def map_with_args(
+    func: Callable[..., T],
+    args_list: List[Tuple[Any, ...]]
+) -> List[Tuple[Tuple[Any, ...], T]]:
     """
-    Executes multiple functions from a module with provided argument tuples.
+    Maps a list of argument tuples to the results of calling the function with those arguments.
+    Args:
+        func: The function to call with the arguments.
+        args_list: A list of argument tuples to pass to the function.
+    Returns:
+        A list of tuples where each item is (args, result).
+    """
+    return [(args, func(*args)) for args in args_list]
+
+def map_args_to_function_outputs(
+        module: types.ModuleType,
+        test_inputs: Dict[str, List[Tuple[Any, ...]]]
+) -> Dict[str, List[Tuple[Tuple[Any, ...], Any]]]:
+    """
+    Applies a modules functions to the test inputs
+    Args:
+        module: The imported file storing the functions
+        test_inputs: The dictionary planning the test cases
+    Returns:
+        A Dictionary of function names and the stored function arguments and results according to test_inputs
     """
     return {
-        func_name: {
-            args: getattr(module, func_name)(*args) for args in arg_list
-        }
-        for func_name, arg_list in function_args.items()
+        func_name: map_with_args(getattr(module, func_name), args_list)
+        for func_name, args_list in test_inputs.items()
     }
 
-def load_function_args(function_args_path: str) -> Dict[str, List[Tuple[Any, ...]]]:
+def load_test_inputs(test_inputs_path: str) -> Dict[str, List[Tuple[Any, ...]]]:
     """
-    Dynamically loads the function_args dictionary from a Python file.
+    Dynamically loads the test_inputs dictionary from a Python file.
     
     Args:
-        function_args_path: Path to the Python file containing `function_args`.
+        test_inputs_path: Path to the Python file containing `test_inputs`.
 
     Returns:
-        function_args: The dictionary containing function names and argument tuples.
+        test_inputs: The dictionary containing function names and argument tuples.
     """
     try:
-        spec = importlib.util.spec_from_file_location("function_args_module", function_args_path)
+        spec = importlib.util.spec_from_file_location("test_inputs_module", test_inputs_path)
         if spec is None:
-            raise FileNotFoundError(f"Could not find the file: {function_args_path}")
+            raise FileNotFoundError(f"Could not find the file: {test_inputs_path}")
         
-        function_args_module = importlib.util.module_from_spec(spec)
-        sys.modules["function_args_module"] = function_args_module
+        test_inputs_module = importlib.util.module_from_spec(spec)
+        sys.modules["test_inputs_module"] = test_inputs_module
         
         if spec.loader:
-            spec.loader.exec_module(function_args_module)
+            spec.loader.exec_module(test_inputs_module)
         else:
-            raise ImportError(f"Could not load the module from {function_args_path}")
+            raise ImportError(f"Could not load the module from {test_inputs_path}")
         
-        if not hasattr(function_args_module, "function_args"):
-            raise AttributeError(f"{function_args_path} must define a 'function_args' dictionary.")
+        if not hasattr(test_inputs_module, "test_inputs"):
+            raise AttributeError(f"{test_inputs_path} must define a 'test_inputs' dictionary.")
         
-        return function_args_module.function_args
+        return test_inputs_module.test_inputs
     except Exception as e:
-        print(f"Error loading function_args from file: {e}")
+        print(f"Error loading test_inputs from file: {e}")
         raise e
 
 def load_module(module_path: str) -> types.ModuleType:
@@ -104,7 +122,7 @@ def make_test_func(
     func_name: str,
     cases: List[Tuple],
     module: object,
-    stored_results: Dict[str, Dict[Tuple, Any]],
+    stored_results: Dict[str, List[Tuple[Tuple[Any, ...], Any]]],
     fail_fast: bool
 ) -> Callable[[unittest.TestCase], None]:
     """
@@ -127,10 +145,9 @@ def make_test_func(
         # Track if there were any assertion failures
         failures = []
 
-        for args in cases:
+        for args, expected in cases:
             with self.subTest(func=func_name, args=args):
                 actual = getattr(module, func_name)(*args)
-                expected = stored_results[func_name][args]
 
                 try:
                     # Attempt to directly compare the actual and expected values
